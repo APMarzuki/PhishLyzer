@@ -1,0 +1,26 @@
+# Secrets and Config
+.env
+.env.backup
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# PyCharm
+.idea/
+
+# Distribution / Build
+dist/
+build/
+*.spec
+*.exe
+
+# Application Data (Reports)
+data/
+logs/
+!data/.gitkeep
+!logs/.gitkeep
