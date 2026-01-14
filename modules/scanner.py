@@ -19,13 +19,10 @@ class PhishScanner:
             return None
 
     def _get_domain_age(self, domain):
-        """Safely get domain age without crashing on KeyError."""
+        """Safely get domain age and return as an integer or 'Unknown'."""
         try:
             res = whois.whois(domain)
-
-            # Use .get() on the dictionary to avoid KeyError: 'domain'
             if not isinstance(res, dict):
-                # If whois returns a custom object, we safely convert it
                 created = getattr(res, 'creation_date', None)
             else:
                 created = res.get('creation_date')
@@ -37,16 +34,45 @@ class PhishScanner:
                 return (datetime.now() - created).days
             return "Unknown"
         except Exception as e:
-            # This catches the [Errno 2] missing file error without crashing the app
+            # Captures WHOIS lookup errors (like "No match") as N/A
             print(f"[!] WHOIS lookup skipped: {e}")
             return "N/A"
 
+    def _calculate_risk(self, vt_malicious, abuse_conf, age):
+        """
+        High-Sensitivity scoring algorithm.
+        Ensures that 'Unknown' or 'New' domains are flagged even if APIs are clean.
+        """
+        score = 0
+
+        # 1. VirusTotal Penalty (Reactive Detection)
+        # If even one engine flags it, we start at 40 points.
+        if vt_malicious > 0:
+            score += 40 + (vt_malicious * 10)
+
+        # 2. AbuseIPDB Penalty (Reactive Detection)
+        if abuse_conf > 25:
+            score += (abuse_conf / 2)
+
+        # 3. Domain Age & "Unknown" Penalty (Proactive Detection)
+        # This is where we catch "Zero-Day" phishing.
+        if age in ["Unknown", "N/A", None]:
+            # If we can't verify the age, it's a suspicious 'grey' area.
+            score += 35
+        elif isinstance(age, (int, float)):
+            if age < 30:
+                score += 60  # Extremely high risk: Domain registered < 1 month ago
+            elif age < 365:
+                score += 25  # Moderate risk: Domain is less than a year old
+
+        # Final score is capped at 100
+        return int(min(score, 100))
+
     def scan_email(self, email):
-        # Clean input: get the part after @ or use the whole thing if it's an IP
+        # Clean input
         target = email.split('@')[-1] if '@' in email else email
         print(f"\n[*] Researching: {target}")
 
-        # Initialize results immediately so we have a 'safety net'
         self.results = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "target": email,
@@ -73,7 +99,6 @@ class PhishScanner:
 
             # 2. Intel Gathering
             print("[*] Querying Intelligence APIs...")
-
             if is_ip:
                 vt_stats = self.client.check_virustotal_ip(target)
             else:
@@ -87,21 +112,12 @@ class PhishScanner:
             if vt_stats: self.results["intel"]["virus_total"] = vt_stats
             if abuse_data: self.results["intel"]["abuse_ip_db"] = abuse_data
 
-            # 4. Scoring Logic (Using .get to prevent crashes)
-            score = 0
-
-            # VirusTotal Score
+            # 4. Final Scoring
             vt_malicious = self.results["intel"]["virus_total"].get('malicious', 0)
-            if vt_malicious > 0: score += 50
-
-            # AbuseIPDB Score
             abuse_conf = self.results["intel"]["abuse_ip_db"].get('abuseConfidenceScore', 0)
-            if abuse_conf > 25: score += 40
 
-            # Age Score
-            if isinstance(age, int) and age < 30: score += 30
-
-            self.results["risk_score"] = min(score, 100)
+            # Assign the calculated risk to results
+            self.results["risk_score"] = self._calculate_risk(vt_malicious, abuse_conf, age)
 
         except Exception as global_err:
             print(f"[X] Analysis partially completed due to: {global_err}")
