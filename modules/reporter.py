@@ -11,34 +11,41 @@ class ReportGenerator:
             os.makedirs(self.output_dir)
 
     def save_json(self, data):
-        """Saves raw analysis data to a JSON file."""
-        filename = f"report_{data['domain']}_{datetime.now().strftime('%H%M%S')}.json"
+        """Saves raw analysis data to a JSON file safely."""
+        # Use .get() with fallbacks to avoid KeyErrors
+        target_name = data.get('domain') or data.get('target', 'unknown_target')
+        filename = f"report_{target_name}_{datetime.now().strftime('%H%M%S')}.json"
         filepath = os.path.join(self.output_dir, filename)
         with open(filepath, 'w') as f:
             json.dump(data, f, indent=4)
         return filepath
 
     def save_pdf(self, data):
-        """Generates a professional PDF report."""
+        """Generates a professional PDF report safely."""
         pdf = FPDF()
         pdf.add_page()
+
+        # Safely extract variables
+        target_name = data.get('domain') or data.get('target', 'Unknown')
+        timestamp = data.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        age = data.get('domain_age_days', 'N/A')
+        score = data.get('risk_score', 0)
 
         # Header
         pdf.set_font("helvetica", "B", 20)
         pdf.cell(0, 10, "PhishLyzer Security Report", ln=True, align="C")
         pdf.set_font("helvetica", "", 10)
-        pdf.cell(0, 10, f"Generated on: {data['timestamp']}", ln=True, align="C")
+        pdf.cell(0, 10, f"Generated on: {timestamp}", ln=True, align="C")
         pdf.ln(10)
 
         # Summary Section
         pdf.set_font("helvetica", "B", 14)
         pdf.cell(0, 10, "1. Executive Summary", ln=True)
         pdf.set_font("helvetica", "", 12)
-        pdf.cell(0, 10, f"Target Domain: {data['domain']}", ln=True)
-        pdf.cell(0, 10, f"Domain Age: {data['domain_age_days']} days", ln=True)
+        pdf.cell(0, 10, f"Target: {target_name}", ln=True)
+        pdf.cell(0, 10, f"Domain Age: {age} days", ln=True)
 
         # Risk Score with Color Coding
-        score = data['risk_score']
         if score >= 70:
             pdf.set_text_color(255, 0, 0)  # Red
             status = "DANGER"
@@ -58,24 +65,35 @@ class ReportGenerator:
         pdf.set_font("helvetica", "B", 14)
         pdf.cell(0, 10, "2. Intelligence Breakdown", ln=True)
 
+        intel = data.get('intel', {})
+
         with pdf.table() as table:
             row = table.row()
             row.cell("Source")
             row.cell("Finding")
 
             # VirusTotal Row
-            vt = data['intel']['virus_total']
+            vt = intel.get('virus_total')
+            vt_finding = "N/A"
+            if isinstance(vt, dict):
+                vt_finding = f"Malicious Flags: {vt.get('malicious', 0)}"
+
             row = table.row()
             row.cell("VirusTotal")
-            row.cell(f"Malicious Flags: {vt['malicious'] if vt else 'N/A'}")
+            row.cell(vt_finding)
 
-            # MetaDefender Row
-            meta = data['intel']['metadefender']
+            # AbuseIPDB Row
+            abuse = intel.get('abuse_ip_db')
+            abuse_finding = "Clean / No Data"
+            if isinstance(abuse, dict):
+                conf = abuse.get('abuseConfidenceScore', 0)
+                abuse_finding = f"Abuse Confidence: {conf}%"
+
             row = table.row()
-            row.cell("MetaDefender")
-            row.cell("Detected" if meta else "Clean / No Data")
+            row.cell("AbuseIPDB")
+            row.cell(abuse_finding)
 
-        filename = f"report_{data['domain']}_{datetime.now().strftime('%H%M%S')}.pdf"
+        filename = f"report_{target_name}_{datetime.now().strftime('%H%M%S')}.pdf"
         filepath = os.path.join(self.output_dir, filename)
         pdf.output(filepath)
         return filepath

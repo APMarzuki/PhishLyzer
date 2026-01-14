@@ -1,26 +1,39 @@
-# Secrets and Config
+# === Secrets and Config ===
 .env
 .env.backup
+*.local
+# If you ever use a service account for Firebase, ignore the JSON key:
+*-firebase-adminsdk-*.json
 
-# Python
+# === Python / Environment ===
 __pycache__/
 *.py[cod]
 *$py.class
 venv/
 .venv/
 env/
+# Pipenv / Poetry files (if you ever use them)
+Pipfile.lock
+poetry.lock
 
-# PyCharm
-.idea/
-
-# Distribution / Build
+# === PyInstaller / Build Artifacts ===
 dist/
 build/
 *.spec
 *.exe
+# Ignore the platform-specific build folders
+__pyinstaller/
 
-# Application Data (Reports)
-data/
-logs/
+# === Application Data (Reports) ===
+# We want the folders to exist on GitHub, but never the content.
+data/*
+logs/*
+# This "Negation" ensures the placeholder stays so the folders exist.
 !data/.gitkeep
 !logs/.gitkeep
+
+# === IDE & System Clutter ===
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
